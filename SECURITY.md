@@ -13,3 +13,8 @@ Do not open a public issue containing exploitable details. Use GitHub private vu
 - Keep GitHub Actions permissions minimal and review third-party actions before use.
 - Use fictitious, non-identifying fixtures in tests and documentation.
 - Revoke and rotate any credential immediately if exposure is suspected.
+- The SPA is a public OIDC client using Authorization Code with PKCE; never configure a client
+  secret in `VITE_*` variables or browser code.
+- Store OIDC state only in `sessionStorage`. Do not place access tokens in URLs, logs, rendered
+  markup, analytics events or `localStorage`.
+- Validate post-authentication return paths as local protected routes to prevent open redirects.
