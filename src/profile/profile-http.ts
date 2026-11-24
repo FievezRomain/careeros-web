@@ -2,8 +2,11 @@ import type { AccessTokenPort } from "../auth/session";
 import {
   profileItemPageSchema,
   profileItemSchema,
+  searchCriteriaSnapshotSchema,
   type ProfileItem,
   type ProfileItemInput,
+  type SearchCriteriaInput,
+  type SearchCriteriaSnapshot,
 } from "./profile";
 import {
   ProfileAccessDeniedError,
@@ -57,22 +60,62 @@ export class HttpProfile implements ProfilePort {
     return parsed.data;
   }
 
-  async #request(path: string, init: RequestInit): Promise<Response> {
+  async getSearchCriteria(): Promise<SearchCriteriaSnapshot | null> {
+    const response = await this.#request(
+      "/v1/profile/search-criteria",
+      { method: "GET" },
+      true,
+    );
+    if (response.status === 404) return null;
+    return this.#searchCriteria(await this.#json(response));
+  }
+
+  async saveSearchCriteria(
+    input: SearchCriteriaInput,
+    idempotencyKey: string,
+  ): Promise<SearchCriteriaSnapshot> {
+    const response = await this.#request("/v1/profile/search-criteria", {
+      method: "PUT",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(input),
+    });
+    return this.#searchCriteria(await this.#json(response));
+  }
+
+  async setSearchState(
+    state: "active" | "paused",
+    idempotencyKey: string,
+  ): Promise<SearchCriteriaSnapshot> {
+    const action = state === "active" ? "resume" : "pause";
+    const response = await this.#request(
+      `/v1/profile/search-criteria/${action}`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+      },
+    );
+    return this.#searchCriteria(await this.#json(response));
+  }
+
+  async #request(
+    path: string,
+    init: RequestInit,
+    allowNotFound = false,
+  ): Promise<Response> {
     const token = await this.#tokens.getAccessToken();
     if (token === null)
       throw new ProfileAccessDeniedError("Profile access requires a session.");
 
     let response: Response;
     try {
+      const headers = new Headers(init.headers);
+      headers.set("Accept", "application/json");
+      headers.set("Authorization", `Bearer ${token}`);
+      if (init.body !== undefined)
+        headers.set("Content-Type", "application/json");
       response = await this.#fetch(`${this.#baseUrl}${path}`, {
         ...init,
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${token}`,
-          ...(init.body === undefined
-            ? {}
-            : { "Content-Type": "application/json" }),
-        },
+        headers,
       });
     } catch {
       throw new ProfileUnavailableError("Profile service is unavailable.");
@@ -81,9 +124,10 @@ export class HttpProfile implements ProfilePort {
     if (response.status === 401 || response.status === 403) {
       throw new ProfileAccessDeniedError("Profile access was denied.");
     }
-    if (response.status === 422) {
+    if (response.status === 422 || response.status === 409) {
       throw new ProfileValidationError("The profile item is invalid.");
     }
+    if (allowNotFound && response.status === 404) return response;
     if (!response.ok)
       throw new ProfileUnavailableError("Profile request failed.");
     return response;
@@ -95,5 +139,12 @@ export class HttpProfile implements ProfilePort {
     } catch {
       throw new ProfileUnavailableError("Invalid profile response.");
     }
+  }
+
+  #searchCriteria(value: unknown): SearchCriteriaSnapshot {
+    const parsed = searchCriteriaSnapshotSchema.safeParse(value);
+    if (!parsed.success)
+      throw new ProfileUnavailableError("Invalid search criteria response.");
+    return parsed.data;
   }
 }

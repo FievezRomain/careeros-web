@@ -24,6 +24,44 @@ const ITEM = {
   validationStatus: "userConfirmed",
 } as const;
 
+const SEARCH = {
+  criteriaVersionId: "00000000-0000-4000-8000-000000000010",
+  version: 1,
+  state: "active",
+  criteria: {
+    targetRoles: ["Backend Engineer"],
+    locations: ["Paris"],
+    remotePolicy: "hybrid",
+    contractTypes: ["CDI"],
+    exclusions: [],
+    minimumScore: 75,
+  },
+  schedule: {
+    timezone: "Europe/Paris",
+    windowStart: "08:00",
+    windowEnd: "10:00",
+  },
+  searchSignature: {
+    signatureId: "a".repeat(64),
+    targetRoles: ["backend engineer"],
+    locations: ["paris"],
+    remotePolicy: "hybrid",
+    contractTypes: ["cdi"],
+    exclusions: [],
+  },
+  createdAt: "2026-01-01T00:00:00Z",
+} as const;
+
+const SEARCH_INPUT = {
+  targetRoles: [...SEARCH.criteria.targetRoles],
+  locations: [...SEARCH.criteria.locations],
+  remotePolicy: SEARCH.criteria.remotePolicy,
+  contractTypes: [...SEARCH.criteria.contractTypes],
+  exclusions: [...SEARCH.criteria.exclusions],
+  minimumScore: SEARCH.criteria.minimumScore,
+  schedule: { ...SEARCH.schedule },
+};
+
 function tokens(value: string | null): AccessTokenPort {
   return { getAccessToken: () => Promise.resolve(value) };
 }
@@ -129,6 +167,68 @@ describe("HttpProfile", () => {
         method: "PUT",
       },
     ]);
+  });
+
+  it("loads, updates and pauses versioned search criteria idempotently", async () => {
+    const requests: { url: string; init: RequestInit | undefined }[] = [];
+    const profile = new HttpProfile(
+      "https://profile.example.invalid",
+      tokens("synthetic-token"),
+      (input, init) => {
+        requests.push({
+          url:
+            typeof input === "string"
+              ? input
+              : input instanceof URL
+                ? input.href
+                : input.url,
+          init,
+        });
+        return Promise.resolve(Response.json(SEARCH));
+      },
+    );
+
+    await expect(profile.getSearchCriteria()).resolves.toEqual(SEARCH);
+    await expect(
+      profile.saveSearchCriteria(SEARCH_INPUT, "criteria-command-1"),
+    ).resolves.toEqual(SEARCH);
+    await expect(
+      profile.setSearchState("paused", "criteria-command-2"),
+    ).resolves.toEqual(SEARCH);
+
+    expect(requests.map(({ url, init }) => [url, init?.method])).toEqual([
+      ["https://profile.example.invalid/v1/profile/search-criteria", "GET"],
+      ["https://profile.example.invalid/v1/profile/search-criteria", "PUT"],
+      [
+        "https://profile.example.invalid/v1/profile/search-criteria/pause",
+        "POST",
+      ],
+    ]);
+    expect(new Headers(requests[1]?.init?.headers).get("Idempotency-Key")).toBe(
+      "criteria-command-1",
+    );
+    expect(new Headers(requests[2]?.init?.headers).get("Idempotency-Key")).toBe(
+      "criteria-command-2",
+    );
+    expect(requests[1]?.init?.body).toBe(JSON.stringify(SEARCH_INPUT));
+  });
+
+  it("maps absent and malformed search criteria safely", async () => {
+    const absent = new HttpProfile(
+      "https://profile.example.invalid",
+      tokens("synthetic-token"),
+      () => Promise.resolve(new Response(null, { status: 404 })),
+    );
+    await expect(absent.getSearchCriteria()).resolves.toBeNull();
+
+    const malformed = new HttpProfile(
+      "https://profile.example.invalid",
+      tokens("synthetic-token"),
+      () => Promise.resolve(Response.json({ ...SEARCH, version: 0 })),
+    );
+    await expect(malformed.getSearchCriteria()).rejects.toThrow(
+      ProfileUnavailableError,
+    );
   });
 
   it("rejects malformed successful responses at the adapter boundary", async () => {

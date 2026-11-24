@@ -44,6 +44,14 @@ before transport. Loading, empty, saved, validation, temporary-service and autho
 states are explicit. A denied session clears the profile view and does not expose previously loaded
 facts or provider details. Server-side authorization and ownership remain authoritative.
 
+The same protected view exposes the account's active job-search criteria through the profile
+port. A user can activate, update, pause or resume the daily search, see the immutable criteria
+version and configure its IANA timezone and execution window. The initial values are explicitly
+shown as `Europe/Paris`, `08:00`–`10:00`; they are defaults, not a hidden scheduler decision.
+Every mutation carries a fresh idempotency key and every successful response is validated before
+rendering. The UI also explains which profile changes request rematching; the profile service
+remains authoritative for that classification.
+
 ## Contract rules
 
 - APIs and events are versioned.
