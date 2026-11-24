@@ -8,6 +8,7 @@ import {
 import type { WebEnvironment } from "../config/environment";
 import {
   safeReturnTo,
+  type AccessTokenPort,
   type AuthenticatedSession,
   type CompletedSignIn,
   type SessionListener,
@@ -67,7 +68,7 @@ export function oidcSettings(
     redirect_uri: environment.VITE_OIDC_REDIRECT_URI,
     post_logout_redirect_uri: environment.VITE_OIDC_POST_LOGOUT_REDIRECT_URI,
     response_type: "code",
-    scope: "openid profile email",
+    scope: "openid profile email profile:read profile:write",
     loadUserInfo: false,
     monitorSession: true,
     automaticSilentRenew: false,
@@ -82,7 +83,7 @@ export function oidcSettings(
   };
 }
 
-export class OidcSession implements SessionPort {
+export class OidcSession implements SessionPort, AccessTokenPort {
   readonly #manager: OidcUserManager;
 
   constructor(
@@ -101,6 +102,13 @@ export class OidcSession implements SessionPort {
       return null;
     }
     return toSession(user);
+  }
+
+  async getAccessToken(): Promise<string | null> {
+    const user = await this.#manager.getUser();
+    if (user === null || user.expired || user.access_token.length === 0)
+      return null;
+    return user.access_token;
   }
 
   async beginSignIn(returnTo: string): Promise<void> {

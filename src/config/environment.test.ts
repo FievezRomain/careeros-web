@@ -7,6 +7,7 @@ const validEnvironment = {
   VITE_OIDC_CLIENT_ID: "careeros-web",
   VITE_OIDC_REDIRECT_URI: "https://web.example.invalid/auth/callback",
   VITE_OIDC_POST_LOGOUT_REDIRECT_URI: "https://web.example.invalid/sign-in",
+  VITE_PROFILE_API_BASE_URL: "https://profile.example.invalid",
 };
 
 describe("loadEnvironment", () => {

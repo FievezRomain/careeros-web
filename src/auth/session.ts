@@ -22,6 +22,10 @@ export interface SessionPort {
   onSessionChanged(listener: SessionListener): () => void;
 }
 
+export interface AccessTokenPort {
+  getAccessToken(): Promise<string | null>;
+}
+
 export function safeReturnTo(value: unknown): string {
   return typeof value === "string" &&
     value.startsWith("/app") &&
