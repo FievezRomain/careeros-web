@@ -7,6 +7,8 @@ import {
   profileItemInputSchema,
   type ProfileItem,
   type ProfileItemInput,
+  type SearchCriteriaInput,
+  type SearchCriteriaSnapshot,
 } from "./profile";
 import { ProfileProvider } from "./profile-provider";
 import { ProfilePage } from "./profile-page";
@@ -59,9 +61,46 @@ const SKILL: ProfileItem = {
   validationStatus: "userConfirmed",
 };
 
+const SEARCH: SearchCriteriaSnapshot = {
+  criteriaVersionId: "00000000-0000-4000-8000-000000000010",
+  version: 1,
+  state: "active",
+  criteria: {
+    targetRoles: ["Backend Engineer"],
+    locations: ["Paris", "Remote"],
+    remotePolicy: "any",
+    contractTypes: ["CDI"],
+    exclusions: ["Lead"],
+    minimumScore: 70,
+  },
+  schedule: {
+    timezone: "Europe/Paris",
+    windowStart: "08:00",
+    windowEnd: "10:00",
+  },
+  searchSignature: {
+    signatureId: "a".repeat(64),
+    targetRoles: ["backend engineer"],
+    locations: ["paris", "remote"],
+    remotePolicy: "any",
+    contractTypes: ["cdi"],
+    exclusions: ["lead"],
+  },
+  createdAt: "2026-01-01T00:00:00Z",
+};
+
 class FakeProfile implements ProfilePort {
   listResult: Promise<readonly ProfileItem[]>;
+  searchResult: Promise<SearchCriteriaSnapshot | null> = Promise.resolve(null);
   saveCalls: { input: ProfileItemInput; itemId?: string }[] = [];
+  searchSaveCalls: {
+    input: SearchCriteriaInput;
+    idempotencyKey: string;
+  }[] = [];
+  searchStateCalls: {
+    state: "active" | "paused";
+    idempotencyKey: string;
+  }[] = [];
   saveError: Error | null = null;
 
   constructor(items: readonly ProfileItem[] | Promise<readonly ProfileItem[]>) {
@@ -70,6 +109,10 @@ class FakeProfile implements ProfilePort {
 
   list(): Promise<readonly ProfileItem[]> {
     return this.listResult;
+  }
+
+  getSearchCriteria(): Promise<SearchCriteriaSnapshot | null> {
+    return this.searchResult;
   }
 
   save(input: ProfileItemInput, itemId?: string): Promise<ProfileItem> {
@@ -95,6 +138,33 @@ class FakeProfile implements ProfilePort {
       itemId: itemId ?? SKILL.itemId,
       ...(input.level === undefined ? {} : { levelSource: "selfDeclared" }),
     });
+  }
+
+  saveSearchCriteria(
+    input: SearchCriteriaInput,
+    idempotencyKey: string,
+  ): Promise<SearchCriteriaSnapshot> {
+    this.searchSaveCalls.push({ input, idempotencyKey });
+    return Promise.resolve({
+      ...SEARCH,
+      criteria: {
+        targetRoles: input.targetRoles,
+        locations: input.locations,
+        remotePolicy: input.remotePolicy,
+        contractTypes: input.contractTypes,
+        exclusions: input.exclusions,
+        minimumScore: input.minimumScore,
+      },
+      schedule: input.schedule,
+    });
+  }
+
+  setSearchState(
+    state: "active" | "paused",
+    idempotencyKey: string,
+  ): Promise<SearchCriteriaSnapshot> {
+    this.searchStateCalls.push({ state, idempotencyKey });
+    return Promise.resolve({ ...SEARCH, state, version: 2 });
   }
 }
 
@@ -143,6 +213,72 @@ describe("ProfilePage", () => {
         },
       },
     ]);
+  });
+
+  it("shows the explicit default schedule and activates daily search", async () => {
+    const profile = new FakeProfile([]);
+    renderProfile(profile);
+    const user = userEvent.setup();
+
+    expect(
+      await screen.findByText(/not active · default schedule/i),
+    ).not.toBeNull();
+    expect(screen.getByText(/Europe\/Paris 08:00–10:00/)).not.toBeNull();
+    await user.type(screen.getByLabelText(/target roles/i), "Backend Engineer");
+    await user.type(screen.getByLabelText(/^locations/i), "Paris, Remote");
+    await user.type(screen.getByLabelText(/contract types/i), "CDI");
+    await user.click(screen.getByRole("button", { name: /activate search/i }));
+
+    expect((await screen.findByRole("status")).textContent).toMatch(
+      /automatic search criteria saved/i,
+    );
+    expect(screen.getByText(/active · criteria version 1/i)).not.toBeNull();
+    expect(profile.searchSaveCalls).toHaveLength(1);
+    expect(profile.searchSaveCalls[0]?.input).toMatchObject({
+      targetRoles: ["Backend Engineer"],
+      locations: ["Paris", "Remote"],
+      contractTypes: ["CDI"],
+      minimumScore: 70,
+      schedule: {
+        timezone: "Europe/Paris",
+        windowStart: "08:00",
+        windowEnd: "10:00",
+      },
+    });
+    expect(profile.searchSaveCalls[0]?.idempotencyKey).toMatch(/^search-/);
+  });
+
+  it("pauses an active search and explains rematch-relevant changes", async () => {
+    const profile = new FakeProfile([]);
+    profile.searchResult = Promise.resolve(SEARCH);
+    renderProfile(profile);
+    const user = userEvent.setup();
+
+    expect(
+      await screen.findByText(/role, skill, experience, location/i),
+    ).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: /pause search/i }));
+
+    expect((await screen.findByRole("status")).textContent).toMatch(
+      /automatic search paused/i,
+    );
+    expect(screen.getByText(/paused · criteria version 2/i)).not.toBeNull();
+    expect(profile.searchStateCalls[0]).toMatchObject({ state: "paused" });
+    expect(profile.searchStateCalls[0]?.idempotencyKey).toMatch(/^search-/);
+  });
+
+  it("rejects incomplete search criteria before transport", async () => {
+    const profile = new FakeProfile([]);
+    renderProfile(profile);
+    const user = userEvent.setup();
+
+    await screen.findByText(/not active · default schedule/i);
+    await user.click(screen.getByRole("button", { name: /activate search/i }));
+
+    expect((await screen.findByRole("alert")).textContent).toMatch(
+      /too small/i,
+    );
+    expect(profile.searchSaveCalls).toHaveLength(0);
   });
 
   it("rejects an invalid date range before calling the service", async () => {
@@ -230,6 +366,9 @@ describe("ProfilePage", () => {
       list: () =>
         Promise.reject(new ProfileAccessDeniedError("secret token detail")),
       save: vi.fn(),
+      getSearchCriteria: vi.fn(),
+      saveSearchCriteria: vi.fn(),
+      setSearchState: vi.fn(),
     };
     renderProfile(profile);
 

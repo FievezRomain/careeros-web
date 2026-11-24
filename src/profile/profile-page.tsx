@@ -3,9 +3,12 @@ import { useCallback, useEffect, useState, type SyntheticEvent } from "react";
 import {
   inputFromItem,
   profileItemInputSchema,
+  searchCriteriaInputSchema,
   type ProfileItem,
   type ProfileItemInput,
   type ProfileItemKind,
+  type SearchCriteriaInput,
+  type SearchCriteriaSnapshot,
 } from "./profile";
 import { useProfilePort } from "./profile-context";
 import {
@@ -15,7 +18,11 @@ import {
 
 type ProfileState =
   | Readonly<{ status: "loading" }>
-  | Readonly<{ status: "ready"; items: readonly ProfileItem[] }>
+  | Readonly<{
+      status: "ready";
+      items: readonly ProfileItem[];
+      search: SearchCriteriaSnapshot | null;
+    }>
   | Readonly<{ status: "denied" }>
   | Readonly<{ status: "error" }>;
 
@@ -50,9 +57,9 @@ export function ProfilePage() {
   const [notice, setNotice] = useState("");
 
   const load = useCallback(() => {
-    void profile.list().then(
-      (items) => {
-        setState({ status: "ready", items });
+    void Promise.all([profile.list(), profile.getSearchCriteria()]).then(
+      ([items, search]) => {
+        setState({ status: "ready", items, search });
       },
       (error: unknown) => {
         setState(
@@ -114,7 +121,11 @@ export function ProfilePage() {
       );
       setState((current) =>
         current.status === "ready"
-          ? { status: "ready", items: replaceItem(current.items, saved) }
+          ? {
+              status: "ready",
+              items: replaceItem(current.items, saved),
+              search: current.search,
+            }
           : current,
       );
       setEditing(null);
@@ -123,6 +134,48 @@ export function ProfilePage() {
     } catch (error) {
       if (error instanceof ProfileAccessDeniedError) {
         setEditing(null);
+        setState({ status: "denied" });
+      }
+      throw error;
+    }
+  };
+
+  const saveSearch = async (input: SearchCriteriaInput): Promise<void> => {
+    try {
+      const search = await profile.saveSearchCriteria(
+        input,
+        `search-${globalThis.crypto.randomUUID()}`,
+      );
+      setState((current) =>
+        current.status === "ready" ? { ...current, search } : current,
+      );
+      setNotice("Automatic search criteria saved.");
+    } catch (error) {
+      if (error instanceof ProfileAccessDeniedError) {
+        setState({ status: "denied" });
+      }
+      throw error;
+    }
+  };
+
+  const transitionSearch = async (
+    searchState: "active" | "paused",
+  ): Promise<void> => {
+    try {
+      const search = await profile.setSearchState(
+        searchState,
+        `search-${globalThis.crypto.randomUUID()}`,
+      );
+      setState((current) =>
+        current.status === "ready" ? { ...current, search } : current,
+      );
+      setNotice(
+        searchState === "active"
+          ? "Automatic search resumed."
+          : "Automatic search paused.",
+      );
+    } catch (error) {
+      if (error instanceof ProfileAccessDeniedError) {
         setState({ status: "denied" });
       }
       throw error;
@@ -150,6 +203,12 @@ export function ProfilePage() {
           {notice}
         </p>
       )}
+
+      <SearchCriteriaPanel
+        snapshot={state.search}
+        onSave={saveSearch}
+        onTransition={transitionSearch}
+      />
 
       <div className="profile-layout">
         <section aria-labelledby="saved-facts-title">
@@ -205,6 +264,218 @@ export function ProfilePage() {
         />
       </div>
     </main>
+  );
+}
+
+function listField(form: FormData, name: string): string[] {
+  return field(form, name)
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+}
+
+function searchDraftFromForm(form: FormData): unknown {
+  return {
+    targetRoles: listField(form, "targetRoles"),
+    locations: listField(form, "locations"),
+    remotePolicy: field(form, "remotePolicy"),
+    contractTypes: listField(form, "contractTypes"),
+    exclusions: listField(form, "exclusions"),
+    minimumScore: Number(field(form, "minimumScore")),
+    schedule: {
+      timezone: field(form, "timezone"),
+      windowStart: field(form, "windowStart"),
+      windowEnd: field(form, "windowEnd"),
+    },
+  };
+}
+
+function SearchCriteriaPanel({
+  snapshot,
+  onSave,
+  onTransition,
+}: Readonly<{
+  snapshot: SearchCriteriaSnapshot | null;
+  onSave(input: SearchCriteriaInput): Promise<void>;
+  onTransition(state: "active" | "paused"): Promise<void>;
+}>) {
+  const [status, setStatus] = useState<"idle" | "saving" | "error">("idle");
+  const [message, setMessage] = useState("");
+  const schedule = snapshot?.schedule ?? {
+    timezone: "Europe/Paris",
+    windowStart: "08:00",
+    windowEnd: "10:00",
+  };
+
+  const submit = (event: SyntheticEvent<HTMLFormElement, SubmitEvent>) => {
+    event.preventDefault();
+    const parsed = searchCriteriaInputSchema.safeParse(
+      searchDraftFromForm(new FormData(event.currentTarget)),
+    );
+    if (!parsed.success) {
+      setStatus("error");
+      setMessage(
+        parsed.error.issues[0]?.message ?? "Review the search criteria.",
+      );
+      return;
+    }
+    setStatus("saving");
+    setMessage("");
+    void onSave(parsed.data).then(
+      () => {
+        setStatus("idle");
+      },
+      (error: unknown) => {
+        if (error instanceof ProfileAccessDeniedError) return;
+        setStatus("error");
+        setMessage(
+          error instanceof ProfileValidationError
+            ? "The service rejected these search criteria."
+            : "The automatic search could not be updated.",
+        );
+      },
+    );
+  };
+
+  const transition = () => {
+    if (snapshot === null) return;
+    setStatus("saving");
+    const next = snapshot.state === "active" ? "paused" : "active";
+    void onTransition(next).then(
+      () => {
+        setStatus("idle");
+      },
+      (error: unknown) => {
+        if (error instanceof ProfileAccessDeniedError) return;
+        setStatus("error");
+        setMessage("The automatic search state could not be updated.");
+      },
+    );
+  };
+
+  return (
+    <section className="profile-editor" aria-labelledby="search-criteria-title">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Daily discovery</p>
+          <h2 id="search-criteria-title">Automatic opportunity search</h2>
+          <p>
+            {snapshot === null
+              ? "Not active · default schedule shown below"
+              : `${snapshot.state === "active" ? "Active" : "Paused"} · criteria version ${snapshot.version.toString()}`}
+            {" · "}
+            {schedule.timezone} {schedule.windowStart}–{schedule.windowEnd}
+          </p>
+        </div>
+        {snapshot !== null && (
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={status === "saving"}
+            onClick={transition}
+          >
+            {snapshot.state === "active" ? "Pause search" : "Resume search"}
+          </button>
+        )}
+      </div>
+      <p className="lead">
+        Role, skill, experience, location, work-preference and criteria changes
+        request rematching. Contact and presentation changes do not.
+      </p>
+      <form onSubmit={submit} noValidate>
+        <label>
+          Target roles <span>Comma separated</span>
+          <input
+            name="targetRoles"
+            defaultValue={snapshot?.criteria.targetRoles.join(", ") ?? ""}
+          />
+        </label>
+        <label>
+          Locations <span>Comma separated</span>
+          <input
+            name="locations"
+            defaultValue={snapshot?.criteria.locations.join(", ") ?? ""}
+          />
+        </label>
+        <label>
+          Remote policy
+          <select
+            name="remotePolicy"
+            defaultValue={snapshot?.criteria.remotePolicy ?? "any"}
+          >
+            <option value="any">Any</option>
+            <option value="remote">Remote</option>
+            <option value="hybrid">Hybrid</option>
+            <option value="onsite">On-site</option>
+          </select>
+        </label>
+        <label>
+          Contract types <span>Comma separated</span>
+          <input
+            name="contractTypes"
+            defaultValue={snapshot?.criteria.contractTypes.join(", ") ?? ""}
+          />
+        </label>
+        <label>
+          Exclusions <span>Optional, comma separated</span>
+          <input
+            name="exclusions"
+            defaultValue={snapshot?.criteria.exclusions.join(", ") ?? ""}
+          />
+        </label>
+        <label>
+          Minimum recommendation score
+          <input
+            name="minimumScore"
+            type="number"
+            min="0"
+            max="100"
+            defaultValue={snapshot?.criteria.minimumScore ?? 70}
+          />
+        </label>
+        <label>
+          Timezone
+          <select name="timezone" defaultValue={schedule.timezone}>
+            <option value="Europe/Paris">Europe/Paris</option>
+            <option value="UTC">UTC</option>
+          </select>
+        </label>
+        <label>
+          Daily start
+          <input
+            name="windowStart"
+            type="time"
+            defaultValue={schedule.windowStart}
+          />
+        </label>
+        <label>
+          Daily end
+          <input
+            name="windowEnd"
+            type="time"
+            defaultValue={schedule.windowEnd}
+          />
+        </label>
+        {message.length > 0 && (
+          <p className="error-message" role="alert">
+            {message}
+          </p>
+        )}
+        <div className="form-actions wide-field">
+          <button
+            className="primary-button"
+            type="submit"
+            disabled={status === "saving"}
+          >
+            {status === "saving"
+              ? "Saving…"
+              : snapshot === null
+                ? "Activate search"
+                : "Save criteria"}
+          </button>
+        </div>
+      </form>
+    </section>
   );
 }
 

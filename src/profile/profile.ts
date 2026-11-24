@@ -100,6 +100,54 @@ export type ProfileItemInput = Readonly<z.infer<typeof profileItemInputSchema>>;
 export type ProfileItem = Readonly<z.infer<typeof profileItemSchema>>;
 export type ProfileItemKind = ProfileItem["kind"];
 
+export const searchScheduleSchema = z
+  .object({
+    timezone: z.enum(["Europe/Paris", "UTC"]),
+    windowStart: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/),
+    windowEnd: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/),
+  })
+  .refine((value) => value.windowStart < value.windowEnd, {
+    error: "Search start time must precede the end time.",
+    path: ["windowEnd"],
+  });
+
+export const searchCriteriaInputSchema = z.object({
+  targetRoles: z.array(z.string().trim().min(1).max(200)).min(1).max(20),
+  locations: z.array(z.string().trim().min(1).max(200)).min(1).max(20),
+  remotePolicy: z.enum(["remote", "hybrid", "onsite", "any"]),
+  contractTypes: z.array(z.string().trim().min(1).max(100)).min(1).max(10),
+  exclusions: z.array(z.string().trim().min(1).max(200)).max(30),
+  minimumScore: z.number().int().min(0).max(100),
+  schedule: searchScheduleSchema,
+});
+
+const searchSignatureSchema = searchCriteriaInputSchema
+  .pick({
+    targetRoles: true,
+    locations: true,
+    remotePolicy: true,
+    contractTypes: true,
+    exclusions: true,
+  })
+  .extend({ signatureId: z.string().length(64) });
+
+export const searchCriteriaSnapshotSchema = z.object({
+  criteriaVersionId: z.uuid(),
+  version: z.number().int().positive(),
+  state: z.enum(["active", "paused"]),
+  criteria: searchCriteriaInputSchema.omit({ schedule: true }),
+  schedule: searchScheduleSchema,
+  searchSignature: searchSignatureSchema,
+  createdAt: z.iso.datetime(),
+});
+
+export type SearchCriteriaInput = Readonly<
+  z.infer<typeof searchCriteriaInputSchema>
+>;
+export type SearchCriteriaSnapshot = Readonly<
+  z.infer<typeof searchCriteriaSnapshotSchema>
+>;
+
 export function inputFromItem(item: ProfileItem): ProfileItemInput {
   if (item.kind === "experience") {
     return {
