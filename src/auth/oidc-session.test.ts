@@ -17,6 +17,7 @@ const environment: WebEnvironment = {
   VITE_OIDC_CLIENT_ID: "careeros-web",
   VITE_OIDC_REDIRECT_URI: "https://web.example.invalid/auth/callback",
   VITE_OIDC_POST_LOGOUT_REDIRECT_URI: "https://web.example.invalid/sign-in",
+  VITE_PROFILE_API_BASE_URL: "https://profile.example.invalid",
 };
 
 function user(
@@ -134,6 +135,7 @@ describe("oidcSettings", () => {
     expect(settings.userStore).toBeInstanceOf(WebStorageStateStore);
     expect(settings.stateStore).toBeInstanceOf(WebStorageStateStore);
     expect(settings.automaticSilentRenew).toBe(false);
+    expect(settings.scope).toContain("profile:read profile:write");
     expect(settings).not.toHaveProperty("client_secret");
   });
 });
@@ -150,6 +152,24 @@ describe("OidcSession", () => {
     await expect(session.restore()).resolves.toEqual({
       user: { subject: "synthetic-user-001", displayName: "Synthetic Person" },
     });
+  });
+
+  it("provides an active access token only to injected service adapters", async () => {
+    const active = new OidcSession(
+      environment,
+      window.sessionStorage,
+      fakeManager(user()).manager,
+    );
+    const anonymous = new OidcSession(
+      environment,
+      window.sessionStorage,
+      fakeManager(null).manager,
+    );
+
+    await expect(active.getAccessToken()).resolves.toBe(
+      "synthetic-access-token",
+    );
+    await expect(anonymous.getAccessToken()).resolves.toBeNull();
   });
 
   it("removes expired state and treats it as anonymous", async () => {

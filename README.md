@@ -27,17 +27,19 @@ Copy-Item .env.example .env
 npm run dev
 ```
 
-Configure only the public OIDC authority, client identifier and redirect URIs. The browser client
-uses Authorization Code with PKCE and never has a client secret. OIDC user and transaction state
-use `sessionStorage`, so closing the browser session removes local authentication state.
+Configure the public OIDC authority, client identifier, redirect URIs and versioned profile API
+base URL. The browser client uses Authorization Code with PKCE and never has a client secret.
+OIDC user and transaction state use `sessionStorage`, so closing the browser session removes local
+authentication state.
 
 Run `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm run test:coverage` and
 `npm run build` before review.
 
 ## Status
 
-Authenticated application shell with protected navigation, provider-neutral OIDC session adapter
-and automated quality gates. Feature pages remain intentionally incremental.
+Authenticated application shell with protected navigation and a profile onboarding/editor for
+owned experiences, education and self-declared skills. The editor validates input before transport,
+validates service responses at the adapter boundary and fails closed on authorization denial.
 
 ## License
 

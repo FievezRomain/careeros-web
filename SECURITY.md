@@ -18,3 +18,5 @@ Do not open a public issue containing exploitable details. Use GitHub private vu
 - Store OIDC state only in `sessionStorage`. Do not place access tokens in URLs, logs, rendered
   markup, analytics events or `localStorage`.
 - Validate post-authentication return paths as local protected routes to prevent open redirects.
+- Keep profile API tokens inside injected adapters. Presentation components receive typed owned
+  facts only, and successful API payloads are runtime-validated before rendering.

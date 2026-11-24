@@ -13,6 +13,7 @@ import {
   SignInPage,
 } from "./pages";
 import { RequireAuthenticated } from "./require-authenticated";
+import { ProfilePage } from "../profile/profile-page";
 
 export const routes: RouteObject[] = [
   { path: "/", element: <Navigate replace to="/app" /> },
@@ -28,12 +29,7 @@ export const routes: RouteObject[] = [
           { index: true, element: <OverviewPage /> },
           {
             path: "profile",
-            element: (
-              <PlaceholderPage
-                title="Profile"
-                detail="Your verified professional story starts here."
-              />
-            ),
+            element: <ProfilePage />,
           },
           {
             path: "jobs",
