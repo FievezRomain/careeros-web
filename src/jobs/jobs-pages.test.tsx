@@ -6,7 +6,7 @@ import { expect, it, vi } from "vitest";
 import { routes } from "../app/router";
 import { AuthProvider } from "../auth/auth-provider";
 import { JobsContext, JobsError, type JobsPort } from "./jobs-context";
-import type { Job } from "./jobs-http";
+import type { Job, Recommendation } from "./jobs-http";
 
 const offer: Job = {
   opportunityId: "12345678-0000-4000-8000-000000000001",
@@ -95,3 +95,75 @@ it.each([
     expect(screen.queryByRole("heading", { name: offer.title })).toBeNull();
   },
 );
+
+const match: Recommendation = {
+  groupId: offer.groupId,
+  title: offer.title,
+  employer: offer.employer,
+  state: "inactive",
+  reason: "hard_conflict",
+  match: {
+    opportunityVersionId: offer.opportunityId,
+    sourceAccess: "full_text",
+    score: 0,
+    findings: [
+      {
+        requirementId: offer.groupId,
+        statement: "Hold a synthetic certification.",
+        status: "missing",
+        factId: offer.opportunityId,
+        minimumLevel: 2,
+        confirmedLevel: 0,
+        weight: 2,
+        earnedWeight: 0,
+      },
+    ],
+    hardConflicts: [offer.groupId],
+    explanation: {
+      assessedRequirements: 1,
+      totalRequirements: 2,
+      assessedWeight: 2,
+      totalWeight: 3,
+      earnedWeight: 0,
+      uncertainty: "unconfirmed_profile_facts",
+      scoreBounds: { minimum: 0, maximum: 33 },
+    },
+    limitation: "This score does not guarantee an interview or employment.",
+  },
+};
+
+it("renders recommendations in API order and shows zero, uncertainty and a hard conflict", async () => {
+  const external = {
+    ...match,
+    groupId: offer.opportunityId,
+    title: "External opportunity",
+    employer: null,
+    match: {
+      ...match.match,
+      sourceAccess: "external_to_verify" as const,
+      score: null,
+    },
+  };
+  open("/app/jobs", {
+    listRecommendations: () => Promise.resolve([match, external]),
+    getRecommendation: () => Promise.resolve(match),
+  });
+  await screen.findByText("Score unavailable");
+  expect(
+    screen
+      .getAllByRole("listitem")
+      .map((item) => item.querySelector("a")?.textContent),
+  ).toEqual([offer.title, external.title]);
+  await userEvent.click(screen.getByRole("link", { name: offer.title }));
+  expect(await screen.findByText("Hard eligibility conflict")).not.toBeNull();
+  expect(screen.getByText("0% match")).not.toBeNull();
+  expect(screen.getByText(/0–33%/)).not.toBeNull();
+  expect(screen.getByText(match.match.limitation)).not.toBeNull();
+});
+
+it("shows no recommendation message for the empty personalized view", async () => {
+  open("/app/jobs");
+  expect(
+    await screen.findByText("No recommendations on this page."),
+  ).not.toBeNull();
+});
