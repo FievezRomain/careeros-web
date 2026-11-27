@@ -49,7 +49,7 @@ describe("jobs HTTP contracts", () => {
       .mockResolvedValueOnce(Response.json(job))
       .mockResolvedValueOnce(new Response(null, { status: 404 }));
     const jobs = adapter(fetchPort);
-    expect((await jobs.listJobs(2, signal)).items[0].title).toBe(job.title);
+    expect((await jobs.listJobs(2, signal)).items[0]?.title).toBe(job.title);
     expect(await jobs.listRecommendations(20, signal)).toEqual([]);
     expect(await jobs.getJob(id, signal)).toEqual(job);
     expect(await jobs.getRecommendation(job, signal)).toBeNull();
@@ -59,7 +59,7 @@ describe("jobs HTTP contracts", () => {
       `/api/jobs/v1/jobs/${id}`,
       `/api/matching/v1/recommendations/${groupId}`,
     ]);
-    expect(fetchPort.mock.calls[0][1]).toMatchObject({
+    expect(fetchPort.mock.calls[0]?.[1]).toMatchObject({
       headers: { Authorization: "Bearer example-token" },
       redirect: "error",
       signal,
