@@ -6,6 +6,8 @@ const environmentSchema = z.object({
   VITE_OIDC_REDIRECT_URI: z.url(),
   VITE_OIDC_POST_LOGOUT_REDIRECT_URI: z.url(),
   VITE_PROFILE_API_BASE_URL: z.url(),
+  VITE_JOB_API_BASE_URL: z.url({ protocol: /^https?$/ }).optional(),
+  VITE_MATCHING_API_BASE_URL: z.url({ protocol: /^https?$/ }).optional(),
 });
 
 export type WebEnvironment = Readonly<z.infer<typeof environmentSchema>>;
