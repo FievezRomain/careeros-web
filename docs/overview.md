@@ -62,6 +62,18 @@ version. The service supplies the score, evidence, uncertainty and eligibility
 reason. The browser keeps the access token in the HTTP adapter and validates
 each response before rendering. Denied requests display a generic error.
 
+## Resume preview and approval
+
+An eligible recommendation offers **Create resume** in its list and detail
+views. The action sends the evaluation and pinned source identifiers. The
+review shows missing requirements, a protected PDF preview and an explicit
+approval for that version. Stale facts require refreshed recommendations.
+
+The browser calls the resume API through `/api/resume` by default or
+`VITE_RESUME_API_BASE_URL`. Configure `resume:drafts:generate`,
+`resume:versions:read`, `resume:versions:write` and
+`resume:versions:approve` in the identity provider.
+
 ## Contract rules
 
 - APIs and events are versioned.

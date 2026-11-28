@@ -69,7 +69,7 @@ export function oidcSettings(
     post_logout_redirect_uri: environment.VITE_OIDC_POST_LOGOUT_REDIRECT_URI,
     response_type: "code",
     scope:
-      "openid profile email profile:read profile:write jobs:read matching:recommendations:read",
+      "openid profile email profile:read profile:write jobs:read matching:recommendations:read resume:drafts:generate resume:versions:read resume:versions:write resume:versions:approve",
     loadUserInfo: false,
     monitorSession: true,
     automaticSilentRenew: false,

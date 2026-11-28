@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useParams, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../auth/auth-context";
+import { ResumeAction } from "../resume/resume-flow";
 import { JobsError, useJobs } from "./jobs-context";
 import {
   recommendationPageSize,
@@ -163,21 +164,25 @@ export function RecommendationsPage() {
               <p>No recommendations on this page.</p>
             ) : (
               <ul className="job-list">
-                {items.map(({ groupId, title, employer, match }) => (
-                  <JobRow
-                    key={groupId}
-                    id={match.opportunityVersionId}
-                    title={title}
-                    employer={employer}
-                    access={match.sourceAccess}
-                  >
-                    <strong>
-                      {match.score === null
-                        ? "Score unavailable"
-                        : `${String(match.score)}% match`}
-                    </strong>
-                  </JobRow>
-                ))}
+                {items.map((recommendation) => {
+                  const { groupId, title, employer, match } = recommendation;
+                  return (
+                    <JobRow
+                      key={groupId}
+                      id={match.opportunityVersionId}
+                      title={title}
+                      employer={employer}
+                      access={match.sourceAccess}
+                    >
+                      <strong>
+                        {match.score === null
+                          ? "Score unavailable"
+                          : `${String(match.score)}% match`}
+                      </strong>
+                      <ResumeAction recommendation={recommendation} />
+                    </JobRow>
+                  );
+                })}
               </ul>
             )}
             <Pagination
@@ -295,9 +300,20 @@ function JobDetail({
       <section className="job-panel">
         <h2>Match explanation</h2>
         {match ? (
-          <MatchExplanation recommendation={match} />
+          <>
+            <MatchExplanation recommendation={match} />
+            <ResumeAction recommendation={match} />
+          </>
         ) : (
-          <p>No match explanation for this version yet.</p>
+          <>
+            <p>No match explanation for this version yet.</p>
+            {offer.sourceAccess === "external_to_verify" && (
+              <p>
+                Verify or manually import the full offer before creating a
+                resume.
+              </p>
+            )}
+          </>
         )}
       </section>
     </>
