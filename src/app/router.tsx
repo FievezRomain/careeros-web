@@ -19,6 +19,7 @@ import {
   RecommendationsPage,
 } from "../jobs/jobs-pages";
 import { ProfilePage } from "../profile/profile-page";
+import { ResumeReviewPage } from "../resume/resume-flow";
 
 export const routes: RouteObject[] = [
   { path: "/", element: <Navigate replace to="/app" /> },
@@ -39,6 +40,7 @@ export const routes: RouteObject[] = [
           { path: "jobs", element: <RecommendationsPage /> },
           { path: "jobs/catalog", element: <JobCatalogPage /> },
           { path: "jobs/:id", element: <JobDetailPage /> },
+          { path: "resumes/:id/:version", element: <ResumeReviewPage /> },
           {
             path: "resumes",
             element: (

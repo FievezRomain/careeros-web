@@ -35,9 +35,13 @@ const matches = z.object({
   score,
   sourceAccess,
   opportunityVersionId: uuid,
+  profileSnapshotId: uuid.optional(),
 });
 const recommendationSummary = z.object({
   groupId: uuid,
+  recommendationId: uuid.optional(),
+  evaluationId: uuid.optional(),
+  criteriaVersionId: uuid.optional(),
   title: z.string().min(1),
   employer: z.string().nullable(),
   state: z.enum(["active", "inactive", "unassessed"]),

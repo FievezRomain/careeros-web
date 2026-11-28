@@ -8,6 +8,7 @@ const environmentSchema = z.object({
   VITE_PROFILE_API_BASE_URL: z.url(),
   VITE_JOB_API_BASE_URL: z.url({ protocol: /^https?$/ }).optional(),
   VITE_MATCHING_API_BASE_URL: z.url({ protocol: /^https?$/ }).optional(),
+  VITE_RESUME_API_BASE_URL: z.url({ protocol: /^https?$/ }).optional(),
 });
 
 export type WebEnvironment = Readonly<z.infer<typeof environmentSchema>>;
