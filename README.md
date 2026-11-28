@@ -32,6 +32,11 @@ base URL. The browser client uses Authorization Code with PKCE and never has a c
 OIDC user and transaction state use `sessionStorage`, so closing the browser session removes local
 authentication state.
 
+The Jobs views require the OIDC scopes `jobs:read` and
+`matching:recommendations:read`. Route `/api/jobs` and `/api/matching` through
+the same-origin gateway and strip each prefix. For browser-accessible service
+gateways, set `VITE_JOB_API_BASE_URL` and `VITE_MATCHING_API_BASE_URL`.
+
 Run `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm run test:coverage` and
 `npm run build` before review.
 

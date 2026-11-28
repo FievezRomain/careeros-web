@@ -28,7 +28,7 @@ messages without logging authorization responses.
 
 All `/app` routes are children of one authentication guard. The guard renders no private shell
 while restoration is pending, redirects anonymous sessions to `/sign-in` with a validated local
-return path, and fails closed when restoration errors. Jobs, Resumes and Applications remain
+return path, and fails closed when restoration errors. Resumes and Applications remain
 protected placeholders until their dedicated stories land.
 
 ## Profile onboarding and editor
@@ -51,6 +51,16 @@ shown as `Europe/Paris`, `08:00`–`10:00`; they are defaults, not a hidden sche
 Every mutation carries a fresh idempotency key and every successful response is validated before
 rendering. The UI also explains which profile changes request rematching; the profile service
 remains authoritative for that classification.
+
+## Job catalog and recommendations
+
+`/app/jobs` preserves the matching service's recommendation order.
+`/app/jobs/catalog` browses the owned job catalog and
+`/app/jobs/:id` displays an immutable job version, source and evidence state.
+The match explanation appears only when the evaluation uses the displayed
+version. The service supplies the score, evidence, uncertainty and eligibility
+reason. The browser keeps the access token in the HTTP adapter and validates
+each response before rendering. Denied requests display a generic error.
 
 ## Contract rules
 

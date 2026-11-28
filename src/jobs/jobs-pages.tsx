@@ -3,7 +3,12 @@ import { Link, NavLink, useParams, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../auth/auth-context";
 import { JobsError, useJobs } from "./jobs-context";
-import type { Job } from "./jobs-http";
+import {
+  recommendationPageSize,
+  type Job,
+  type Recommendation,
+} from "./jobs-http";
+import { MatchExplanation } from "./match-explanation";
 
 type ReadState<T> =
   { key: string; result: T } | { key: string; error: JobsError };
@@ -66,6 +71,9 @@ function DataView<T>({
 function JobNav() {
   return (
     <nav className="job-nav" aria-label="Jobs">
+      <NavLink end to="/app/jobs">
+        Recommendations
+      </NavLink>
       <NavLink end to="/app/jobs/catalog">
         Browse catalog
       </NavLink>
@@ -135,6 +143,54 @@ function JobRow({
   );
 }
 
+export function RecommendationsPage() {
+  const jobs = useJobs();
+  const page = usePage();
+  const load = useCallback(
+    (signal: AbortSignal) =>
+      jobs.listRecommendations((page - 1) * recommendationPageSize, signal),
+    [jobs, page],
+  );
+  const state = useJobRead(`recommendations-${String(page)}`, load);
+  return (
+    <main className="page-content jobs-page">
+      <h1>Jobs</h1>
+      <JobNav />
+      <DataView state={state}>
+        {(items) => (
+          <>
+            {items.length === 0 ? (
+              <p>No recommendations on this page.</p>
+            ) : (
+              <ul className="job-list">
+                {items.map(({ groupId, title, employer, match }) => (
+                  <JobRow
+                    key={groupId}
+                    id={match.opportunityVersionId}
+                    title={title}
+                    employer={employer}
+                    access={match.sourceAccess}
+                  >
+                    <strong>
+                      {match.score === null
+                        ? "Score unavailable"
+                        : `${String(match.score)}% match`}
+                    </strong>
+                  </JobRow>
+                ))}
+              </ul>
+            )}
+            <Pagination
+              page={page}
+              hasMore={items.length === recommendationPageSize}
+            />
+          </>
+        )}
+      </DataView>
+    </main>
+  );
+}
+
 export function JobCatalogPage() {
   const jobs = useJobs();
   const page = usePage();
@@ -183,7 +239,13 @@ export function JobCatalogPage() {
   );
 }
 
-function JobDetail({ offer }: { offer: Job }) {
+function JobDetail({
+  offer,
+  match,
+}: {
+  offer: Job;
+  match: Recommendation | null;
+}) {
   const url = URL.canParse(offer.source.reference)
     ? new URL(offer.source.reference)
     : null;
@@ -230,6 +292,14 @@ function JobDetail({ offer }: { offer: Job }) {
           <dd>{offer.evidence.unknownFields.join(", ") || "None recorded"}</dd>
         </dl>
       </section>
+      <section className="job-panel">
+        <h2>Match explanation</h2>
+        {match ? (
+          <MatchExplanation recommendation={match} />
+        ) : (
+          <p>No match explanation for this version yet.</p>
+        )}
+      </section>
     </>
   );
 }
@@ -238,7 +308,11 @@ export function JobDetailPage() {
   const jobs = useJobs();
   const { id = "" } = useParams();
   const load = useCallback(
-    (signal: AbortSignal) => jobs.getJob(id, signal),
+    async (signal: AbortSignal) => {
+      const offer = await jobs.getJob(id, signal);
+      const match = await jobs.getRecommendation(offer, signal);
+      return { offer, match };
+    },
     [id, jobs],
   );
   const state = useJobRead(`job-${id}`, load);
@@ -246,7 +320,7 @@ export function JobDetailPage() {
     <main className="page-content jobs-page">
       <JobNav />
       <DataView state={state}>
-        {(offer) => <JobDetail offer={offer} />}
+        {({ offer, match }) => <JobDetail offer={offer} match={match} />}
       </DataView>
     </main>
   );

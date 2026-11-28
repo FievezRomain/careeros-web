@@ -13,7 +13,11 @@ import {
   SignInPage,
 } from "./pages";
 import { RequireAuthenticated } from "./require-authenticated";
-import { JobCatalogPage, JobDetailPage } from "../jobs/jobs-pages";
+import {
+  JobCatalogPage,
+  JobDetailPage,
+  RecommendationsPage,
+} from "../jobs/jobs-pages";
 import { ProfilePage } from "../profile/profile-page";
 
 export const routes: RouteObject[] = [
@@ -32,7 +36,7 @@ export const routes: RouteObject[] = [
             path: "profile",
             element: <ProfilePage />,
           },
-          { path: "jobs", element: <JobCatalogPage /> },
+          { path: "jobs", element: <RecommendationsPage /> },
           { path: "jobs/catalog", element: <JobCatalogPage /> },
           { path: "jobs/:id", element: <JobDetailPage /> },
           {
